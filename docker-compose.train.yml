@@ -1,0 +1,63 @@
+services:
+  train_summary:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+    container_name: train_summary
+    command: python train/train_summary.py
+    environment:
+      CUDA_VISIBLE_DEVICES: 0
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  train_absa:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+    container_name: train_absa
+    command: python train/train_absa.py
+    environment:
+      CUDA_VISIBLE_DEVICES: 0
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  train_w2v:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+    container_name: train_w2v
+    command: python train/train_w2v.py
+    environment:
+      CUDA_VISIBLE_DEVICES: 0
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+  preprocess:
+    build:
+      context: .
+      dockerfile: Dockerfile.train
+    container_name: preprocess
+    command: python data_pipeline/preprocess.py
+    volumes:
+      - ./data:/app/data
