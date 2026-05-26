@@ -79,6 +79,12 @@ model.train(train_data=train_data, epochs=3, batch_size=4, lr=3e-5)
 
 Генерация итогового вердикта построена на базе трансформера T5 [`IlyaGusev/rut5_base_sum_gazeta`](https://huggingface.co/IlyaGusev/rut5_base_sum_gazeta), предварительно файнтюненного на кастомном датасете `dataset2.parquet` с применением оптимизатора `AdamW` и `GradScaler`. При генерации используется `GenerationConfig` с параметрами `no_repeat_ngram_size=3` и `repetition_penalty=2.5` для блокировки зацикливаний текста.
 
+## Интеграция
+
+С использованием данного API разработано расширение для браузера, которое позволяет более интуитивно визуализировать полученнеые аспекты, рейтинг и краткое описание. Данное расширение доступно по ссылке
+
+> https://github.com/Konstkonst55/kinopoisk-analytics-extension.git
+
 ## Описание API
 
 Веб-сервис реализован с использованием фреймворка `FastAPI`. Для ускорения отдачи ответов настроено кеширование в `Redis` (`fastapi-cache2`) со сроком жизни ключа 86400 секунд.
@@ -87,3 +93,56 @@ model.train(train_data=train_data, epochs=3, batch_size=4, lr=3e-5)
 | ---------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/v1/movie/{movie_id}/aspects` | GET   | Извлекает рецензии для фильма, динамически кластеризует аспекты и предсказывает процентное распределение тональностей по каждому.    | <br>`AspectResponse`: Идентификатор фильма и словарь `aspects`, содержащий объекты с полями `pos`, `neg`, `neu` и счетчиком упоминаний `mentions`. |
 | `/api/v1/movie/{movie_id}/summary` | GET   | Агрегирует тексты, генерирует общий текстовый вердикт с помощью T5 и высчитывает средний рейтинг среди всех ненулевых оценок фильма. | <br>`SummaryResponse`: Идентификатор фильма, строка `summary` и средняя оценка зрителей `average_rating`.                                          |
+
+## Структура проекта
+
+```text
+kinopoisk-analytics/
+│
+├── .gitignore
+├── pyproject.toml                
+├── requirements.txt              
+│
+├── backend/
+│   ├── __init__.py               
+│   ├── config.py                 
+│   ├── main.py                   # FastAPI приложение
+│   └── routes.py                 # API эндпоинты 
+│
+├── data_pipeline/
+│   ├── __init__.py               
+│   └── preprocess.py             # Класс DataPreprocessor
+│
+├── models/
+│   ├── __init__.py              
+│   ├── absa_model.py             # AspectSentimentAnalyzer + BiLSTM
+│   ├── aspect_extractor.py       # KMeansAspectExtractor + Seeded KMeans
+│   └── summary_model.py          # ReviewSummarizer (T5)
+│
+├── utils/
+│   ├── __init__.py             
+│   └── lemmatizer.py             # CustomLemmatizer 
+│
+├── resources/                    
+│   ├── anchor_aspects.csv        # Якорные аспекты для seeded K‑Means
+│   ├── cinema_aspects.csv        # Словарь кинематографических терминов
+│   ├── markers.csv               # Маркеры для извлечения summary
+│   ├── stop_words.csv            # Стоп-слова 
+│   └── suffixes.csv              # Суффиксы для лемматизации 
+│
+├── research/
+│   └── research.ipynb            # Jupyter Notebook с исследованием и визуализациями
+│
+├── tests/
+│   └── test_inference.py         # Тестирование API
+│
+├── train/                        # Скрипты для обучения
+│   ├── train_absa.py
+│   ├── train_summary.py
+│   └── train_w2v.py
+│
+├── Dockerfile                    
+├── Dockerfile.train             
+├── docker-compose.yml          
+└── docker-compose.train.yml      
+```
