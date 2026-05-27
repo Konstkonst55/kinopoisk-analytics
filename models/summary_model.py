@@ -64,22 +64,20 @@ class ReviewSummarizer:
 
         self.model_name = "IlyaGusev/rut5_base_sum_gazeta"
         self.weights_dir = os.path.join(DATA_DIR, "movie_summary_model")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, legacy=False)
-
         is_model_exist = os.path.exists(os.path.join(self.weights_dir, "config.json"))
 
         if load_weights and is_model_exist:
-            self.logger.info("Loading fine-tuned movie summarization model")
-
+            self.logger.info(f"LOADING FINE-TUNED MODEL FROM: {self.weights_dir}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.weights_dir, legacy=False)
             self.model = T5ForConditionalGeneration.from_pretrained(self.weights_dir).to(self.device)
         else:
-            self.logger.info("Loading baseline pre-trained model")
-
+            self.logger.info(f"LOADING BASE MODEL: {self.model_name}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, legacy=False)
             self.model = T5ForConditionalGeneration.from_pretrained(self.model_name).to(self.device)
 
         self.model.eval()
 
-    def train(self, train_data, epochs=3, batch_size=4, lr=3e-5):
+    def train(self, train_data, epochs=3, batch_size=1, lr=1e-4, accumulation_steps=4):
         self.logger.info("Starting fine-tuning on custom movie reviews dataset")
         train_dataset = MovieReviewsDataset(train_data, self.tokenizer)
 
@@ -87,42 +85,41 @@ class ReviewSummarizer:
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=2,
+            num_workers=0,
             pin_memory=True,
             drop_last=True,
         )
 
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=0.01)
-        scaler = torch.cuda.amp.GradScaler()
         self.model.train()
         torch.cuda.empty_cache()
 
         for epoch in range(epochs):
             epoch_loss = 0
+            optimizer.zero_grad(set_to_none=True)
             progress = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}")
 
-            for batch in progress:
+            for i, batch in enumerate(progress):
                 input_ids = batch["input_ids"].to(self.device, non_blocking=True)
                 attention_mask = batch["attention_mask"].to(self.device, non_blocking=True)
                 labels = batch["labels"].to(self.device, non_blocking=True)
-                optimizer.zero_grad(set_to_none=True)
 
-                with torch.cuda.amp.autocast(dtype=torch.float16):
-                    outputs = self.model(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        labels=labels,
-                    )
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                )
 
-                    loss = outputs.loss
+                loss = outputs.loss / accumulation_steps
+                loss.backward()
 
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
-                epoch_loss += loss.item()
-                progress.set_postfix({"loss": f"{loss.item():.4f}"})
+                if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+
+                epoch_loss += loss.item() * accumulation_steps
+                progress.set_postfix({"loss": f"{loss.item() * accumulation_steps:.4f}"})
 
             self.logger.info(f"Epoch {epoch + 1} completion. Average Loss: {epoch_loss / len(train_loader):.4f}")
 
@@ -162,13 +159,13 @@ class ReviewSummarizer:
         chunk_summaries = []
 
         generation_config = GenerationConfig(
-            max_length=150,
+            max_length=70,
             min_length=30,
-            num_beams=4,
-            repetition_penalty=2.5,
+            do_sample=True,
+            top_k=50,
+            top_p=0.92,
+            repetition_penalty=1.8,
             no_repeat_ngram_size=3,
-            encoder_no_repeat_ngram_size=3,
-            early_stopping=True,
             bos_token_id=self.tokenizer.bos_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
@@ -180,7 +177,6 @@ class ReviewSummarizer:
                     chunk = torch.cat([chunk, torch.tensor([self.tokenizer.eos_token_id])])
 
                 chunk_input = chunk.unsqueeze(0).to(self.device)
-
                 output_ids = self.model.generate(input_ids=chunk_input, generation_config=generation_config)
                 summary_part = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
@@ -199,11 +195,11 @@ class ReviewSummarizer:
             final_config = GenerationConfig(
                 max_length=250,
                 min_length=40,
-                num_beams=4,
-                repetition_penalty=2.5,
+                do_sample=True,
+                top_k=50,
+                top_p=0.92,
+                repetition_penalty=1.3,
                 no_repeat_ngram_size=3,
-                encoder_no_repeat_ngram_size=3,
-                early_stopping=True,
                 bos_token_id=self.tokenizer.bos_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
