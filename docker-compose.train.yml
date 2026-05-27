@@ -7,6 +7,7 @@ services:
     command: python train/train_summary.py
     environment:
       CUDA_VISIBLE_DEVICES: 0
+      FORCE_TRAIN: ${FORCE_TRAIN:-false}
     volumes:
       - ./data:/app/data
     deploy:
@@ -25,6 +26,7 @@ services:
     command: python train/train_absa.py
     environment:
       CUDA_VISIBLE_DEVICES: 0
+      FORCE_TRAIN: ${FORCE_TRAIN:-false}
     volumes:
       - ./data:/app/data
     deploy:
@@ -43,6 +45,7 @@ services:
     command: python train/train_w2v.py
     environment:
       CUDA_VISIBLE_DEVICES: 0
+      FORCE_TRAIN: ${FORCE_TRAIN:-false}
     volumes:
       - ./data:/app/data
     deploy:
@@ -59,5 +62,7 @@ services:
       dockerfile: Dockerfile.train
     container_name: preprocess
     command: python data_pipeline/preprocess.py
+    environment:
+      FORCE_TRAIN: ${FORCE_TRAIN:-false}
     volumes:
       - ./data:/app/data

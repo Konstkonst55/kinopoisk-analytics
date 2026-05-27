@@ -185,5 +185,15 @@ class DataPreprocessor:
 
 
 if __name__ == "__main__":
+    import sys
+
+    force_train = os.environ.get("FORCE_TRAIN", "false").lower() == "true"
+    ds1_path = os.path.join(PROCESSED_DIR, "dataset1.parquet")
+    ds2_path = os.path.join(PROCESSED_DIR, "dataset2.parquet")
+
+    if not force_train and os.path.exists(ds1_path) and os.path.exists(ds2_path):
+        print("Datasets already processed. Skipping.")
+        sys.exit(0)
+
     processor = DataPreprocessor()
     processor.run()

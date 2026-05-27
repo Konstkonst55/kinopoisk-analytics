@@ -14,6 +14,13 @@ from models.summary_model import ReviewSummarizer
 logger = setup_logger("TrainSummary")
 
 if __name__ == "__main__":
+    force_train = os.environ.get("FORCE_TRAIN", "false").lower() == "true"
+    weights_dir = os.path.join(DATA_DIR, "movie_summary_model")
+
+    if not force_train and os.path.exists(os.path.join(weights_dir, "config.json")):
+        logger.info("Summary model already exists. Skipping training.")
+        sys.exit(0)
+
     ds2_path = os.path.join(DATA_DIR, "dataset2.parquet")
 
     if not os.path.exists(ds2_path):
@@ -28,11 +35,8 @@ if __name__ == "__main__":
         logger.error("dataset2.parquet is empty. Check preprocessing logic.")
         raise ValueError("Empty dataset")
 
-    train_data = df.to_dict("records")[:20]
-
+    train_data = df.to_dict("records")
     logger.info(f"Loaded {len(train_data)} samples for fine-tuning")
 
     model = ReviewSummarizer(load_weights=False)
-    model.train(train_data=train_data, epochs=1, batch_size=2, lr=5e-5)
-
-    # model.train(train_data=train_data, epochs=3, batch_size=4, lr=3e-5)
+    model.train(train_data=train_data, epochs=3, batch_size=1, lr=1e-4, accumulation_steps=4)
